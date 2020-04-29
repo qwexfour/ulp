@@ -8,7 +8,7 @@ namespace ulp {
 template<typename RepresentFloatT, typename ValueFloatT>
 ValueFloatT calc_ulp(const ValueFloatT &value) {
   static_assert(std::is_floating_point_v<RepresentFloatT>,
-    "floating point type is expected as representaion type");
+    "floating point type is expected as representation type");
   RepresentFloatT casted_value = value;
   RepresentFloatT casted_lo;
   RepresentFloatT casted_hi;
