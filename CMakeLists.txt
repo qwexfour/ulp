@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.0)
 
 find_package(GTest REQUIRED)
 find_package(Boost REQUIRED)
@@ -11,3 +11,4 @@ target_include_directories(ulplib INTERFACE
 target_compile_features(ulplib INTERFACE cxx_std_17)
 
 add_subdirectory(test)
+add_subdirectory(tools)
