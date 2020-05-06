@@ -3,7 +3,10 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
+#include <functional>
 #include <cassert>
 #include <cstdlib>
 
@@ -18,13 +21,23 @@
 // it's meant to be quick and dirty
 // TODO: someday make a good testing app out of it
 
+namespace {
+
 class command_args_info {
+public:
+  enum class function {
+    exp,
+    log
+  };
+
+private:
   std::string input_file_{};
+  function func_;
   bool is_error_{false};
 
 public:
-  command_args_info(const char *input_file = "") :
-    input_file_{input_file}, is_error_{false} {}
+  command_args_info(const char *input_file = "", function func = function::exp) :
+    input_file_{input_file}, func_{func}, is_error_{false} {}
 
   static command_args_info create_error() {
     command_args_info err;
@@ -37,21 +50,48 @@ public:
   }
 
   const std::string &get_input_file() const {
-    assert(!is_error() && "args are invalid");
+    check();
     return input_file_;
+  }
+
+  function get_function() const {
+    check();
+    return func_;
+  }
+
+private:
+  void check() const {
+    assert(!is_error() && "args are invalid");
   }
 };
 
+command_args_info::function parse_function_name(const char *str) {
+  if (str == std::string_view{"exp"}) {
+    return command_args_info::function::exp;
+  } else if (str == std::string_view{"log"}) {
+    return command_args_info::function::log;
+  } else {
+    std::cout << "Unsupported function" << std::endl;
+    exit(0);
+  }
+}
+
 command_args_info parse_args(int argc, const char * const *argv) {
   if (argc < 2) {
-    std::cout << "Please enter the path to input file" << std::endl;
+    std::cout << "Please enter the function name and path to input file"
+      << std::endl;
     return command_args_info::create_error();
   }
-  if (argc > 2) {
+  if (argc < 3) {
+    std::cout << "Please enter the path to input file"
+      << std::endl;
+    return command_args_info::create_error();
+  }
+  if (argc > 3) {
     std::cout << "Too much arguments" << std::endl;
     return command_args_info::create_error();
   }
-  return {argv[1]};
+  return {argv[2], parse_function_name(argv[1])};
 }
 
 template<typename FloatT>
@@ -83,8 +123,8 @@ struct func_points {
   void dump() const {
     check();
     for (int i = 0; i < arguments_.size(); ++i) {
-      std::cout << std::hexfloat << "arg: " << arguments_[i] <<
-        " val: " << values_[i] << std::endl;
+      std::cout << std::hexfloat << arguments_[i] <<
+        " " << values_[i] << std::endl;
     }
   }
 
@@ -123,15 +163,28 @@ func_points<FloatT> read_input_file(const std::string &file_name) {
   return res;
 }
 
-template<typename FloatT>
-func_points<FloatT> analyze_func_error(const func_points<FloatT> &input_data) {
+std::function<boost::multiprecision::mpfr_float_500(boost::multiprecision::mpfr_float_500)>
+get_function(command_args_info::function func_id) {
+  switch(func_id) {
+  case command_args_info::function::exp:
+    return [] (boost::multiprecision::mpfr_float_500 el) -> boost::multiprecision::mpfr_float_500
+      { return boost::math::expm1(el) + 1.0; };
+  case command_args_info::function::log:
+    return [] (boost::multiprecision::mpfr_float_500 el) -> boost::multiprecision::mpfr_float_500
+      { return boost::math::log1p(el - 1.0); };
+  default:
+    assert(0 && "unsupported function");
+  }
+}
+
+} // anonymous namespace
+template<typename FloatT, typename Func>
+func_points<FloatT> analyze_func_error(const func_points<FloatT> &input_data, Func func) {
   func_points<FloatT> error(input_data.size());
   std::copy(input_data.arguments_.begin(), input_data.arguments_.end(),
     std::back_inserter(error.arguments_));
   ulp::analyze_func_ulp(input_data.arguments_.begin(), input_data.arguments_.end(),
-    input_data.values_.begin(), std::back_inserter(error.values_),
-    [] (boost::multiprecision::mpfr_float_500 el) -> boost::multiprecision::mpfr_float_500
-      { return boost::math::expm1(el) + 1.0; });
+    input_data.values_.begin(), std::back_inserter(error.values_), func);
   return error;
 }
 
@@ -141,7 +194,8 @@ int main(int argc, const char * const *argv) {
     return 0;
   }
   auto input_data = read_input_file<double>(args.get_input_file());
-  auto error_data = analyze_func_error(input_data);
+  auto func = get_function(args.get_function());
+  auto error_data = analyze_func_error(input_data, func);
   error_data.dump();
   return 0;
 }
