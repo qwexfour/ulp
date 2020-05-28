@@ -30,14 +30,21 @@ public:
     log
   };
 
+  enum class fptype {
+    flt,
+    dbl
+  };
+
 private:
   std::string input_file_{};
   function func_;
+  fptype type_;
   bool is_error_{false};
 
 public:
-  command_args_info(const char *input_file = "", function func = function::exp) :
-    input_file_{input_file}, func_{func}, is_error_{false} {}
+  command_args_info(const char *input_file = "", function func = function::exp,
+                    fptype type = fptype::flt) :
+    input_file_{input_file}, func_{func}, type_{type}, is_error_{false} {}
 
   static command_args_info create_error() {
     command_args_info err;
@@ -59,6 +66,11 @@ public:
     return func_;
   }
 
+  fptype get_type() const {
+    check();
+    return type_;
+  }
+
 private:
   void check() const {
     assert(!is_error() && "args are invalid");
@@ -76,22 +88,38 @@ command_args_info::function parse_function_name(const char *str) {
   }
 }
 
+command_args_info::fptype parse_fptype(const char *str) {
+  if (str == std::string_view{"float"}) {
+    return command_args_info::fptype::flt;
+  } else if (str == std::string_view{"double"}) {
+    return command_args_info::fptype::dbl;
+  } else {
+    std::cout << "Unsupported type" << std::endl;
+    exit(0);
+  }
+}
+
 command_args_info parse_args(int argc, const char * const *argv) {
   if (argc < 2) {
+    std::cout << "Please enter the floating-point type, "
+      "function name and path to input file" << std::endl;
+    return command_args_info::create_error();
+  }
+  if (argc < 3) {
     std::cout << "Please enter the function name and path to input file"
       << std::endl;
     return command_args_info::create_error();
   }
-  if (argc < 3) {
+  if (argc < 4) {
     std::cout << "Please enter the path to input file"
       << std::endl;
     return command_args_info::create_error();
   }
-  if (argc > 3) {
+  if (argc > 4) {
     std::cout << "Too much arguments" << std::endl;
     return command_args_info::create_error();
   }
-  return {argv[2], parse_function_name(argv[1])};
+  return {argv[3], parse_function_name(argv[2]), parse_fptype(argv[1])};
 }
 
 template<typename FloatT>
@@ -178,6 +206,7 @@ get_function(command_args_info::function func_id) {
 }
 
 } // anonymous namespace
+
 template<typename FloatT, typename Func>
 func_points<FloatT> analyze_func_error(const func_points<FloatT> &input_data, Func func) {
   func_points<FloatT> error(input_data.size());
@@ -188,14 +217,26 @@ func_points<FloatT> analyze_func_error(const func_points<FloatT> &input_data, Fu
   return error;
 }
 
+template<typename FloatT>
+void run_job(const command_args_info &args) {
+  auto input_data = read_input_file<FloatT>(args.get_input_file());
+  auto func = get_function(args.get_function());
+  auto error_data = analyze_func_error(input_data, func);
+  error_data.dump();
+}
+
 int main(int argc, const char * const *argv) {
   auto args = parse_args(argc, argv);
   if (args.is_error()) {
     return 0;
   }
-  auto input_data = read_input_file<double>(args.get_input_file());
-  auto func = get_function(args.get_function());
-  auto error_data = analyze_func_error(input_data, func);
-  error_data.dump();
+  switch(args.get_type()) {
+  case command_args_info::fptype::flt:
+    run_job<float>(args);
+    break;
+  case command_args_info::fptype::dbl:
+    run_job<double>(args);
+    break;
+  }
   return 0;
 }
